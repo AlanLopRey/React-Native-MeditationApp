@@ -1,14 +1,21 @@
 import { View, Text, ImageBackground, Pressable } from "react-native";
-import React, { useEffect, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import MEDITATION_IMAGES from "@/constants/meditation-images";
 import AppGradient from "@/components/AppGradient";
 import { router, useLocalSearchParams } from "expo-router";
 import AntDesign from "@expo/vector-icons/AntDesign";
 import CustomButton from "@/components/CustomButton";
+import { Audio } from "expo-av";
+import { MEDITATION_DATA, AUDIO_FILES } from "@/constants/MeditationData";
+import { TimerContext } from "@/context/TimerContext";
 
 const Meditate = () => {
-  const [secondsRemaining, setSecondsRemaining] = useState(10);
+  const { duration: secondsRemaining, setDuration } = useContext(TimerContext);
+
+  // const [secondsRemaining, setDuration] = useState(10);
   const [isMeditating, setMeditating] = useState(false);
+  const [audioSound, setSound] = useState<Audio.Sound>();
+  const [isPlayingAudio, setPlayingAudio] = useState(false);
   const { id } = useLocalSearchParams();
 
   useEffect(() => {
@@ -22,7 +29,7 @@ const Meditate = () => {
 
     if (isMeditating) {
       timerId = setTimeout(() => {
-        setSecondsRemaining(secondsRemaining - 1);
+        setDuration(secondsRemaining - 1);
       }, 1000);
     }
 
@@ -39,6 +46,50 @@ const Meditate = () => {
   const formattedTimeSeconds = String(
     Math.floor(secondsRemaining % 60)
   ).padStart(2, "0");
+
+  const toggleMeditationSessionStatus = async () => {
+    if (secondsRemaining === 0) setDuration(10);
+
+    setMeditating(!isMeditating);
+
+    await togglePlayPause();
+  };
+
+  const togglePlayPause = async () => {
+    const sound = audioSound ? audioSound : await initializeSound();
+
+    const status = await sound?.getStatusAsync();
+
+    if (status.isLoaded && !isPlayingAudio) {
+      await sound.playAsync();
+      setPlayingAudio(true);
+    } else {
+      await sound.pauseAsync();
+      setPlayingAudio(false);
+    }
+  };
+
+  const handleAdjustDuration = () => {
+    if (isMeditating) toggleMeditationSessionStatus();
+
+    router.push("/(modal)/adjust-duration");
+  };
+
+  const initializeSound = async () => {
+    const audioFileName = MEDITATION_DATA[Number(id) - 1].audio;
+
+    const { sound } = await Audio.Sound.createAsync(AUDIO_FILES[audioFileName]);
+
+    setSound(sound);
+    return sound;
+  };
+
+  useEffect(() => {
+    return () => {
+      setDuration(10);
+      audioSound?.unloadAsync();
+    };
+  }, [audioSound]);
 
   return (
     <View className="flex-1">
@@ -65,8 +116,13 @@ const Meditate = () => {
 
           <View className="mb-7">
             <CustomButton
-              title="Start Meditation"
-              onPress={() => setMeditating(true)}
+              title="Adjust duration"
+              onPress={handleAdjustDuration}
+            />
+            <CustomButton
+              title={isMeditating ? "Stop" : "Start Meditation"}
+              onPress={toggleMeditationSessionStatus}
+              containerStyles="mt-6"
             />
           </View>
         </AppGradient>
